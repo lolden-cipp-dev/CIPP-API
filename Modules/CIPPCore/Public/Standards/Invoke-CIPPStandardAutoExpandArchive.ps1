@@ -1,35 +1,35 @@
 function Invoke-CIPPStandardAutoExpandArchive {
     <#
     .FUNCTIONALITY
-    Internal
-    .APINAME
-    AutoExpandArchive
-    .CAT
-    Exchange Standards
-    .TAG
-    "lowimpact"
-    .HELPTEXT
-    Enables auto-expanding archives for the tenant
-    .DOCSDESCRIPTION
-    Enables auto-expanding archives for the tenant. Does not enable archives for users.
-    .ADDEDCOMPONENT
-    .LABEL
-    Enable Auto-expanding archives
-    .IMPACT
-    Low Impact
-    .POWERSHELLEQUIVALENT
-    Set-OrganizationConfig -AutoExpandingArchive
-    .RECOMMENDEDBY
-    .DOCSDESCRIPTION
-    Enables auto-expanding archives for the tenant
-    .UPDATECOMMENTBLOCK
-    Run the Tools\Update-StandardsComments.ps1 script to update this comment block
+        Internal
+    .COMPONENT
+        (APIName) AutoExpandArchive
+    .SYNOPSIS
+        (Label) Enable Auto-expanding archives
+    .DESCRIPTION
+        (Helptext) Enables auto-expanding archives for the tenant
+        (DocsDescription) Enables auto-expanding archives for the tenant. Does not enable archives for users.
+    .NOTES
+        CAT
+            Exchange Standards
+        TAG
+        ADDEDCOMPONENT
+        IMPACT
+            Low Impact
+        ADDEDDATE
+            2021-11-16
+        POWERSHELLEQUIVALENT
+            Set-OrganizationConfig -AutoExpandingArchive
+        RECOMMENDEDBY
+        UPDATECOMMENTBLOCK
+            Run the Tools\Update-StandardsComments.ps1 script to update this comment block
+    .LINK
+        https://docs.cipp.app/user-documentation/tenant/standards/list-standards/exchange-standards#low-impact
     #>
 
-
-
-
     param($Tenant, $Settings)
+    ##$Rerun -Type Standard -Tenant $Tenant -Settings $Settings 'AutoExpandArchive'
+
     $CurrentState = (New-ExoRequest -tenantid $Tenant -cmdlet 'Get-OrganizationConfig').AutoExpandingArchiveEnabled
 
     If ($Settings.remediate -eq $true) {
@@ -62,7 +62,3 @@ function Invoke-CIPPStandardAutoExpandArchive {
         Add-CIPPBPAField -FieldName 'AutoExpandingArchive' -FieldValue $CurrentState -StoreAs bool -Tenant $tenant
     }
 }
-
-
-
-
