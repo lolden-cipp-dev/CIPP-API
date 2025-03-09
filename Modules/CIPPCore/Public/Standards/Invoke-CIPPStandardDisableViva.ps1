@@ -1,35 +1,34 @@
 function Invoke-CIPPStandardDisableViva {
     <#
     .FUNCTIONALITY
-    Internal
-    .APINAME
-    DisableViva
-    .CAT
-    Exchange Standards
-    .TAG
-    "lowimpact"
-    .HELPTEXT
-    Disables the daily viva reports for all users.
-    .DOCSDESCRIPTION
-    Disables the daily viva reports for all users.
-    .ADDEDCOMPONENT
-    .LABEL
-    Disable daily Insight/Viva reports
-    .IMPACT
-    Low Impact
-    .POWERSHELLEQUIVALENT
-    Set-UserBriefingConfig
-    .RECOMMENDEDBY
-    .DOCSDESCRIPTION
-    Disables the daily viva reports for all users.
-    .UPDATECOMMENTBLOCK
-    Run the Tools\Update-StandardsComments.ps1 script to update this comment block
+        Internal
+    .COMPONENT
+        (APIName) DisableViva
+    .SYNOPSIS
+        (Label) Disable daily Insight/Viva reports
+    .DESCRIPTION
+        (Helptext) Disables the daily viva reports for all users.
+        (DocsDescription) Disables the daily viva reports for all users.
+    .NOTES
+        CAT
+            Exchange Standards
+        TAG
+        ADDEDCOMPONENT
+        IMPACT
+            Low Impact
+        ADDEDDATE
+            2022-05-25
+        POWERSHELLEQUIVALENT
+            Set-UserBriefingConfig
+        RECOMMENDEDBY
+        UPDATECOMMENTBLOCK
+            Run the Tools\Update-StandardsComments.ps1 script to update this comment block
+    .LINK
+        https://docs.cipp.app/user-documentation/tenant/standards/list-standards/exchange-standards#low-impact
     #>
 
-
-
-
     param($Tenant, $Settings)
+    ##$Rerun -Type Standard -Tenant $Tenant -Settings $Settings 'DisableViva'
 
     try {
         # TODO This does not work without Global Admin permissions for some reason. Throws an "EXCEPTION: Tenant admin role is required" error. -Bobby
@@ -71,7 +70,3 @@ function Invoke-CIPPStandardDisableViva {
     }
 
 }
-
-
-
-
