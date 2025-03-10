@@ -1,37 +1,39 @@
 function Invoke-CIPPStandardDisableAppCreation {
     <#
     .FUNCTIONALITY
-    Internal
-    .APINAME
-    DisableAppCreation
-    .CAT
-    Entra (AAD) Standards
-    .TAG
-    "lowimpact"
-    "CIS"
-    .HELPTEXT
-    Disables the ability for users to create App registrations in the tenant.
-    .DOCSDESCRIPTION
-    Disables the ability for users to create applications in Entra. Done to prevent breached accounts from creating an app to maintain access to the tenant, even after the breached account has been secured.
-    .ADDEDCOMPONENT
-    .LABEL
-    Disable App creation by users
-    .IMPACT
-    Low Impact
-    .POWERSHELLEQUIVALENT
-    Update-MgPolicyAuthorizationPolicy
-    .RECOMMENDEDBY
-    "CIS"
-    .DOCSDESCRIPTION
-    Disables the ability for users to create App registrations in the tenant.
-    .UPDATECOMMENTBLOCK
-    Run the Tools\Update-StandardsComments.ps1 script to update this comment block
+        Internal
+    .COMPONENT
+        (APIName) DisableAppCreation
+    .SYNOPSIS
+        (Label) Disable App creation by users
+    .DESCRIPTION
+        (Helptext) Disables the ability for users to create App registrations in the tenant.
+        (DocsDescription) Disables the ability for users to create applications in Entra. Done to prevent breached accounts from creating an app to maintain access to the tenant, even after the breached account has been secured.
+    .NOTES
+        CAT
+            Entra (AAD) Standards
+        TAG
+            "CIS"
+        ADDEDCOMPONENT
+        IMPACT
+            Low Impact
+        ADDEDDATE
+            2024-03-20
+        POWERSHELLEQUIVALENT
+            Update-MgPolicyAuthorizationPolicy
+        RECOMMENDEDBY
+            "CIS"
+            "CIPP"
+        UPDATECOMMENTBLOCK
+            Run the Tools\Update-StandardsComments.ps1 script to update this comment block
+    .LINK
+        https://docs.cipp.app/user-documentation/tenant/standards/list-standards/entra-aad-standards#low-impact
     #>
 
-
-
-
     param($Tenant, $Settings)
+    ##$Rerun -Type Standard -Tenant $Tenant -Settings $Settings 'DisableAppCreation'
+
+
     $CurrentInfo = New-GraphGetRequest -Uri 'https://graph.microsoft.com/beta/policies/authorizationPolicy/authorizationPolicy?$select=defaultUserRolePermissions' -tenantid $Tenant
 
     If ($Settings.remediate -eq $true) {
@@ -64,7 +66,3 @@ function Invoke-CIPPStandardDisableAppCreation {
         Add-CIPPBPAField -FieldName 'UserAppCreationDisabled' -FieldValue $State -StoreAs bool -Tenant $tenant
     }
 }
-
-
-
-
