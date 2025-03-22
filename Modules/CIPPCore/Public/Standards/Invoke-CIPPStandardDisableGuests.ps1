@@ -1,38 +1,41 @@
 function Invoke-CIPPStandardDisableGuests {
     <#
     .FUNCTIONALITY
-    Internal
-    .APINAME
-    DisableGuests
-    .CAT
-    Entra (AAD) Standards
-    .TAG
-    "mediumimpact"
-    .HELPTEXT
-    Blocks login for guest users that have not logged in for 90 days
-    .ADDEDCOMPONENT
-    .LABEL
-    Disable Guest accounts that have not logged on for 90 days
-    .IMPACT
-    Medium Impact
-    .POWERSHELLEQUIVALENT
-    Graph API
-    .RECOMMENDEDBY
-    .DOCSDESCRIPTION
-    Blocks login for guest users that have not logged in for 90 days
-    .UPDATECOMMENTBLOCK
-    Run the Tools\Update-StandardsComments.ps1 script to update this comment block
+        Internal
+    .COMPONENT
+        (APIName) DisableGuests
+    .SYNOPSIS
+        (Label) Disable Guest accounts that have not logged on for 90 days
+    .DESCRIPTION
+        (Helptext) Blocks login for guest users that have not logged in for 90 days
+        (DocsDescription) Blocks login for guest users that have not logged in for 90 days
+    .NOTES
+        CAT
+            Entra (AAD) Standards
+        TAG
+        ADDEDCOMPONENT
+        IMPACT
+            Medium Impact
+        ADDEDDATE
+            2022-10-20
+        POWERSHELLEQUIVALENT
+            Graph API
+        RECOMMENDEDBY
+            "CIS"
+            "CIPP"
+        UPDATECOMMENTBLOCK
+            Run the Tools\Update-StandardsComments.ps1 script to update this comment block
+    .LINK
+        https://docs.cipp.app/user-documentation/tenant/standards/list-standards/entra-aad-standards#medium-impact
     #>
 
-
-
-
     param($Tenant, $Settings)
+    ##$Rerun -Type Standard -Tenant $Tenant -Settings $Settings 'DisableGuests'
+
     $Lookup = (Get-Date).AddDays(-90).ToUniversalTime().ToString('o')
-    $GraphRequest = New-GraphGetRequest -uri "https://graph.microsoft.com/beta/users?`$filter=(signInActivity/lastNonInteractiveSignInDateTime le $Lookup)&`$select=id,UserPrincipalName,signInActivity,mail,userType,accountEnabled" -scope 'https://graph.microsoft.com/.default' -tenantid $Tenant | Where-Object { $_.userType -EQ 'Guest' -and $_.AccountEnabled -EQ $true }
+    $GraphRequest = New-GraphGetRequest -uri "https://graph.microsoft.com/beta/users?`$filter=(signInActivity/lastSuccessfulSignInDateTime le $Lookup)&`$select=id,UserPrincipalName,signInActivity,mail,userType,accountEnabled" -scope 'https://graph.microsoft.com/.default' -tenantid $Tenant | Where-Object { $_.userType -EQ 'Guest' -and $_.AccountEnabled -EQ $true }
 
     If ($Settings.remediate -eq $true) {
-
         if ($GraphRequest) {
             foreach ($guest in $GraphRequest) {
                 try {
@@ -51,17 +54,16 @@ function Invoke-CIPPStandardDisableGuests {
     if ($Settings.alert -eq $true) {
 
         if ($GraphRequest) {
-            Write-LogMessage -API 'Standards' -tenant $tenant -message "Guests accounts with a login longer than 90 days ago: $($GraphRequest.count)" -sev Alert
+            Write-StandardsAlert -message "Guests accounts with a login longer than 90 days ago: $($GraphRequest.count)" -object $GraphRequest -tenant $tenant -standardName 'DisableGuests' -standardId $Settings.standardId
+            Write-LogMessage -API 'Standards' -tenant $tenant -message "Guests accounts with a login longer than 90 days ago: $($GraphRequest.count)" -sev Info
         } else {
             Write-LogMessage -API 'Standards' -tenant $tenant -message 'No guests accounts with a login longer than 90 days ago.' -sev Info
         }
     }
     if ($Settings.report -eq $true) {
         $filtered = $GraphRequest | Select-Object -Property UserPrincipalName, id, signInActivity, mail, userType, accountEnabled
+        $state = $filtered ? $filtered : $true
+        Set-CIPPStandardsCompareField -FieldName 'standards.DisableGuests' -FieldValue $state -TenantFilter $Tenant
         Add-CIPPBPAField -FieldName 'DisableGuests' -FieldValue $filtered -StoreAs json -Tenant $tenant
     }
 }
-
-
-
-
