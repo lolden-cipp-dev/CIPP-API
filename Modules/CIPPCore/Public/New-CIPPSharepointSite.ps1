@@ -55,28 +55,27 @@ function New-CIPPSharepointSite {
         [string]$WebTemplateExtensionId,
 
         [Parameter(Mandatory = $false)]
-        [ValidatePattern('(\{|\()?[A-Za-z0-9]{4}([A-Za-z0-9]{4}\-?){4}[A-Za-z0-9]{12}(\}|\()?')]
         [string]$SensitivityLabel,
 
         [string]$Classification,
 
         [Parameter(Mandatory = $true)]
-        [string]$TenantFilter
+        [string]$TenantFilter,
+
+        $APIName = 'Create SharePoint Site',
+        $Headers
     )
-    $tenantName = (New-GraphGetRequest -uri 'https://graph.microsoft.com/beta/sites/root' -asApp $true -tenantid $TenantFilter).id.Split('.')[0]
-    $AdminUrl = "https://$($tenantName)-admin.sharepoint.com"
+
+    $SharePointInfo = Get-SharePointAdminLink -Public $false -tenantFilter $TenantFilter
     $SitePath = $SiteName -replace ' ' -replace '[^A-Za-z0-9-]'
-    $SiteUrl = "https://$tenantName.sharepoint.com/sites/$SitePath"
-
-
-
+    $SiteUrl = "https://$($SharePointInfo.TenantName).sharepoint.com/sites/$SitePath"
 
     switch ($TemplateName) {
         'Communication' {
             $WebTemplate = 'SITEPAGEPUBLISHING#0'
         }
         'Team' {
-            $WebTemplate = 'STS#0'
+            $WebTemplate = 'STS#3'
         }
     }
 
@@ -128,7 +127,7 @@ function New-CIPPSharepointSite {
         $Request.Classification = $Classification
     }
 
-    Write-Verbose ($Request | ConvertTo-Json -Compress -Depth 10)
+    Write-Verbose (ConvertTo-Json -InputObject $Request -Compress -Depth 10)
 
     $body = @{
         request = $Request
@@ -140,6 +139,38 @@ function New-CIPPSharepointSite {
             'accept'        = 'application/json;odata.metadata=none'
             'odata-version' = '4.0'
         }
-        New-GraphPostRequest -scope "$AdminUrl/.default" -uri "$AdminUrl/_api/SPSiteManager/create" -Body ($body | ConvertTo-Json -Compress -Depth 10) -tenantid $TenantFilter -ContentType 'application/json' -AddedHeaders $AddedHeaders
+        $Results = New-GraphPostRequest -scope "$($SharePointInfo.AdminUrl)/.default" -uri "$($SharePointInfo.AdminUrl)/_api/SPSiteManager/create" -Body ($body | ConvertTo-Json -Compress -Depth 10) -tenantid $TenantFilter -ContentType 'application/json' -AddedHeaders $AddedHeaders
     }
+
+    # Check the results. This response is weird. https://learn.microsoft.com/en-us/sharepoint/dev/apis/site-creation-rest
+    switch ($Results.SiteStatus) {
+        '0' {
+            $Result = "Failed to create new SharePoint site $SiteName with URL $SiteUrl. The site doesn't exist."
+            Write-LogMessage -headers $Headers -API $APIName -tenant $TenantFilter -message $Result -sev Error
+            throw $Results
+        }
+        '1' {
+            $Result = "Successfully created new SharePoint site $SiteName with URL $SiteUrl. The site is however currently being provisioned. Please wait for it to finish."
+            Write-LogMessage -headers $Headers -API $APIName -tenant $TenantFilter -message $Result -sev Info
+            return $Results
+        }
+        '2' {
+            $Result = "Successfully created new SharePoint site $SiteName with URL $SiteUrl"
+            Write-LogMessage -headers $Headers -API $APIName -tenant $TenantFilter -message $Result -sev Info
+            return $Results
+        }
+        '3' {
+            $Result = "Failed to create new SharePoint site $SiteName with URL $SiteUrl. An error occurred while provisioning the site."
+            Write-LogMessage -headers $Headers -API $APIName -tenant $TenantFilter -message $Result -sev Error
+            throw $Results
+        }
+        '4' {
+            Write-LogMessage -headers $Headers -API $APIName -tenant $TenantFilter -message $Result -sev Error
+            $Result = "Failed to create new SharePoint site $SiteName with URL $SiteUrl. The site already exists."
+            throw $Result
+        }
+        Default {}
+    }
+
+
 }
