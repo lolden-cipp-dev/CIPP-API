@@ -12,52 +12,73 @@ function Get-CIPPAzDataTableEntity {
 
     $Results = Get-AzDataTableEntity @PSBoundParameters
     $mergedResults = @{}
+    $rootEntities = @{} # Keyed by "$PartitionKey|$RowKey"
 
-    # First pass: Collect all parts and complete entities
     foreach ($entity in $Results) {
-        if ($entity.OriginalEntityId) {
-            $entityId = $entity.OriginalEntityId
-            if (-not $mergedResults.ContainsKey($entityId)) {
-                $mergedResults[$entityId] = @{
-                    Parts = New-Object 'System.Collections.ArrayList'
-                }
-            }
-            $mergedResults[$entityId]['Parts'].Add($entity) > $null
-        } else {
-            $mergedResults[$entity.RowKey] = @{
+        $partitionKey = $entity.PartitionKey
+        $rowKey = $entity.RowKey
+        $hasOriginalId = $entity.PSObject.Properties.Match('OriginalEntityId') -and $entity.OriginalEntityId
+
+        if (-not $mergedResults.ContainsKey($partitionKey)) {
+            $mergedResults[$partitionKey] = @{}
+        }
+
+        if (-not $hasOriginalId) {
+            # It's a standalone root row
+            $rootEntities["$partitionKey|$rowKey"] = $true
+            $mergedResults[$partitionKey][$rowKey] = @{
                 Entity = $entity
-                Parts  = New-Object 'System.Collections.ArrayList'
+                Parts  = [System.Collections.Generic.List[object]]::new()
+            }
+            continue
+        }
+
+        # It's a part of something else
+        $entityId = $entity.OriginalEntityId
+
+        # Check if this entity's target has a "real" base
+        if ($rootEntities.ContainsKey("$partitionKey|$entityId")) {
+            # Root row exists → skip merging this part
+            continue
+        }
+
+        # Merge it as a part
+        if (-not $mergedResults[$partitionKey].ContainsKey($entityId)) {
+            $mergedResults[$partitionKey][$entityId] = @{
+                Parts = [System.Collections.Generic.List[object]]::new()
             }
         }
+        $mergedResults[$partitionKey][$entityId]['Parts'].Add($entity)
     }
 
-    # Second pass: Reassemble entities from parts
-    $finalResults = @()
-    foreach ($entityId in $mergedResults.Keys) {
-        $entityData = $mergedResults[$entityId]
-        if ($entityData.Parts.Count -gt 0) {
-            $fullEntity = [PSCustomObject]@{}
-            $parts = $entityData.Parts | Sort-Object PartIndex
-            foreach ($part in $parts) {
-                foreach ($key in $part.PSObject.Properties.Name) {
-                    if ($key -notin @('OriginalEntityId', 'PartIndex', 'PartitionKey', 'RowKey', 'Timestamp')) {
-                        if ($fullEntity.PSObject.Properties[$key]) {
-                            $fullEntity | Add-Member -MemberType NoteProperty -Name $key -Value ($fullEntity.$key + $part.$key) -Force
-                        } else {
-                            $fullEntity | Add-Member -MemberType NoteProperty -Name $key -Value $part.$key
+    $finalResults = [System.Collections.Generic.List[object]]::new()
+    foreach ($partitionKey in $mergedResults.Keys) {
+        foreach ($entityId in $mergedResults[$partitionKey].Keys) {
+            $entityData = $mergedResults[$partitionKey][$entityId]
+            if (($entityData.Parts | Measure-Object).Count -gt 0) {
+                $fullEntity = [PSCustomObject]@{}
+                $parts = $entityData.Parts | Sort-Object PartIndex
+                foreach ($part in $parts) {
+                    foreach ($key in $part.PSObject.Properties.Name) {
+                        if ($key -notin @('OriginalEntityId', 'PartIndex', 'PartitionKey', 'RowKey', 'Timestamp')) {
+                            if ($fullEntity.PSObject.Properties[$key]) {
+                                $fullEntity | Add-Member -MemberType NoteProperty -Name $key -Value ($fullEntity.$key + $part.$key) -Force
+                            } else {
+                                $fullEntity | Add-Member -MemberType NoteProperty -Name $key -Value $part.$key
+                            }
                         }
                     }
                 }
+                $fullEntity | Add-Member -MemberType NoteProperty -Name 'PartitionKey' -Value $parts[0].PartitionKey -Force
+                $fullEntity | Add-Member -MemberType NoteProperty -Name 'RowKey' -Value $entityId -Force
+                $fullEntity | Add-Member -MemberType NoteProperty -Name 'Timestamp' -Value $parts[0].Timestamp -Force
+                $finalResults.Add($fullEntity)
+            } else {
+                $FinalResults.Add($entityData.Entity)
             }
-            $fullEntity | Add-Member -MemberType NoteProperty -Name 'PartitionKey' -Value $parts[0].PartitionKey -Force
-            $fullEntity | Add-Member -MemberType NoteProperty -Name 'RowKey' -Value $entityId -Force
-            $finalResults = $finalResults + @($fullEntity)
-        } else {
-            $finalResults = $finalResults + @($entityData.Entity)
         }
     }
 
-    # Third pass: Process split properties and remerge them
     foreach ($entity in $finalResults) {
         if ($entity.SplitOverProps) {
             $splitInfoList = $entity.SplitOverProps | ConvertFrom-Json
