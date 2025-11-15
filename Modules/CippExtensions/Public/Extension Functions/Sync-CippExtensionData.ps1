@@ -131,12 +131,12 @@ function Sync-CippExtensionData {
                     @{
                         id     = 'DeviceCompliancePolicies'
                         method = 'GET'
-                        url    = '/deviceManagement/deviceCompliancePolicies'
+                        url    = '/deviceManagement/deviceCompliancePolicies?$top=999'
                     },
                     @{
                         id     = 'DeviceApps'
                         method = 'GET'
-                        url    = '/deviceAppManagement/mobileApps'
+                        url    = '/deviceAppManagement/mobileApps?$select=id,displayName,description,publisher,isAssigned,createdDateTime,lastModifiedDateTime&$top=999'
                     }
                 )
 
@@ -151,20 +151,26 @@ function Sync-CippExtensionData {
                 )
             }
             'Mailboxes' {
-                $Select = 'id,ExchangeGuid,ArchiveGuid,UserPrincipalName,DisplayName,PrimarySMTPAddress,RecipientType,RecipientTypeDetails,EmailAddresses,WhenSoftDeleted,IsInactiveMailbox,ProhibitSendQuota,ProhibitSendReceiveQuota,LitigationHoldEnabled,InPlaceHolds,HiddenFromAddressListsEnabled'
+                $Select = 'id,ExchangeGuid,ArchiveGuid,UserPrincipalName,DisplayName,PrimarySMTPAddress,RecipientType,RecipientTypeDetails,EmailAddresses,WhenSoftDeleted,IsInactiveMailbox,ForwardingSmtpAddress,DeliverToMailboxAndForward,ForwardingAddress,HiddenFromAddressListsEnabled,ExternalDirectoryObjectId,MessageCopyForSendOnBehalfEnabled,MessageCopyForSentAsEnabled'
                 $ExoRequest = @{
                     tenantid  = $TenantFilter
                     cmdlet    = 'Get-Mailbox'
                     cmdParams = @{}
                     Select    = $Select
                 }
-                $Mailboxes = (New-ExoRequest @ExoRequest) | Select-Object id, ExchangeGuid, ArchiveGuid, WhenSoftDeleted, ProhibitSendQuota, ProhibitSendReceiveQuota, LitigationHoldEnabled, InplaceHolds, HiddenFromAddressListsEnabled, @{ Name = 'UPN'; Expression = { $_.'UserPrincipalName' } },
-
+                $Mailboxes = (New-ExoRequest @ExoRequest) | Select-Object id, ExchangeGuid, ArchiveGuid, WhenSoftDeleted, @{ Name = 'UPN'; Expression = { $_.'UserPrincipalName' } },
                 @{ Name = 'displayName'; Expression = { $_.'DisplayName' } },
                 @{ Name = 'primarySmtpAddress'; Expression = { $_.'PrimarySMTPAddress' } },
                 @{ Name = 'recipientType'; Expression = { $_.'RecipientType' } },
                 @{ Name = 'recipientTypeDetails'; Expression = { $_.'RecipientTypeDetails' } },
-                @{ Name = 'AdditionalEmailAddresses'; Expression = { ($_.'EmailAddresses' | Where-Object { $_ -clike 'smtp:*' }).Replace('smtp:', '') -join ', ' } }
+                @{ Name = 'AdditionalEmailAddresses'; Expression = { ($_.'EmailAddresses' | Where-Object { $_ -clike 'smtp:*' }).Replace('smtp:', '') -join ', ' } },
+                @{Name = 'ForwardingSmtpAddress'; Expression = { $_.'ForwardingSmtpAddress' -replace 'smtp:', '' } },
+                @{Name = 'InternalForwardingAddress'; Expression = { $_.'ForwardingAddress' } },
+                DeliverToMailboxAndForward,
+                HiddenFromAddressListsEnabled,
+                ExternalDirectoryObjectId,
+                MessageCopyForSendOnBehalfEnabled,
+                MessageCopyForSentAsEnabled
 
                 $Entity = @{
                     PartitionKey = $TenantFilter
@@ -211,7 +217,7 @@ function Sync-CippExtensionData {
             try {
                 $TenantResults = New-GraphBulkRequest -Requests @($TenantRequests) -tenantid $TenantFilter
             } catch {
-                Throw "Failed to fetch bulk company data: $_"
+                throw "Failed to fetch bulk company data: $_"
             }
 
             $TenantResults | Select-Object id, body | ForEach-Object {
@@ -220,6 +226,15 @@ function Sync-CippExtensionData {
                     # base64 decode
                     $Data = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($Data)) | ConvertFrom-Json
                     $Data = $Data.Value
+                }
+
+                # Filter out excluded licenses to respect the ExcludedLicenses table
+                if ($_.id -eq 'Licenses') {
+                    $LicenseTable = Get-CIPPTable -TableName ExcludedLicenses
+                    $ExcludedSkuList = Get-CIPPAzDataTableEntity @LicenseTable
+                    if ($ExcludedSkuList) {
+                        $Data = $Data | Where-Object { $_.skuId -notin $ExcludedSkuList.GUID }
+                    }
                 }
 
                 $Entity = @{
@@ -233,9 +248,14 @@ function Sync-CippExtensionData {
 
             if ($AdditionalRequests) {
                 foreach ($AdditionalRequest in $AdditionalRequests) {
+                    if ($AdditionalRequest.Filter) {
+                        $Filter = [scriptblock]::Create($AdditionalRequest.Filter)
+                    } else {
+                        $Filter = { $true }
+                    }
                     $ParentId = $AdditionalRequest.ParentId
                     $GraphRequest = $AdditionalRequest.graphRequest.PSObject.Copy()
-                    $AdditionalRequestQueries = ($TenantResults | Where-Object { $_.id -eq $ParentId }).body.value | ForEach-Object {
+                    $AdditionalRequestQueries = ($TenantResults | Where-Object { $_.id -eq $ParentId }).body.value | Where-Object $Filter | ForEach-Object {
                         if ($_.id) {
                             [PSCustomObject]@{
                                 id     = $_.id
@@ -291,15 +311,15 @@ function Sync-CippExtensionData {
             }
         }
 
-
         $LastSync.LastSync = [datetime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
         $LastSync.Status = 'Completed'
         $LastSync.Error = ''
     } catch {
         $LastSync.Status = 'Failed'
         $LastSync.Error = [string](Get-CippException -Exception $_ | ConvertTo-Json -Compress)
-        throw "Failed to sync data: $($_.Exception.Message)"
+        throw "Failed to sync data: $(Get-NormalizedError -message $_.Exception.Message)"
     } finally {
         Add-CIPPAzDataTableEntity @Table -Entity $LastSync -Force
     }
+    return $LastSync
 }
