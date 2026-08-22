@@ -1,21 +1,23 @@
 function Remove-CIPPCalendarInvites {
     [CmdletBinding()]
     param(
-        $userid,
-        $tenantFilter,
-        $username,
+        $UserID,
+        $TenantFilter,
+        $Username,
         $APIName = 'Remove Calendar Invites',
-        $ExecutingUser
+        $Headers
     )
 
     try {
-        
-        New-ExoRequest -tenantid $tenantFilter -cmdlet 'Remove-CalendarEvents' -Anchor $username -cmdParams @{Identity = $username; QueryWindowInDays = 730 ; CancelOrganizedMeetings = $true ; Confirm = $false} 
-        Write-LogMessage -user $ExecutingUser -API $APIName -message "Cancelled all calendar invites for $($username)" -Sev 'Info' -tenant $tenantFilter
-        "Cancelled all calendar invites for $($username)" 
+        $null = New-ExoRequest -tenantid $TenantFilter -cmdlet 'Remove-CalendarEvents' -Anchor $Username -cmdParams @{Identity = $Username; QueryWindowInDays = 730 ; CancelOrganizedMeetings = $true ; Confirm = $false }
+        $Result = "Successfully cancelled all calendar invites for $($Username)"
+        Write-LogMessage -headers $Headers -API $APIName -message $Result -Sev 'Info' -tenant $TenantFilter
+        return $Result
 
     } catch {
-        Write-LogMessage -user $ExecutingUser -API $APIName -message "Could not cancel calendar invites for $($username): $($_.Exception.Message)" -Sev 'Error' -tenant $tenantFilter
-        return "Could not cancel calendar invites for $($username). Error: $($_.Exception.Message)"
+        $ErrorMessage = Get-CippException -Exception $_
+        $Result = "Failed to cancel calendar invites for $($Username). Error: $($ErrorMessage.NormalizedError)"
+        Write-LogMessage -headers $Headers -API $APIName -message $Result -Sev 'Error' -tenant $TenantFilter -LogData $ErrorMessage
+        throw $Result
     }
 }
